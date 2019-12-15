@@ -127,3 +127,21 @@ prototype에 속성을 정의하는것은 좋은 방법이 아니다.
 
 일반적인 방식으로는 속성은 생성자에서, 메소드는 프로토타입에서 정의한다. 
 
+
+//
+# Inheritance in javascript
+## 프로토타입 상속
+
+### Teacher()생성자 함수 정의
+```
+function Teacher(first, last, age, gender, interests, subject) {
+  Person.call(this, first, last, age, gender, interests);
+
+  this.subject = subject;
+}
+```
+call()함수의 첫번째 매개변수는 다른 곳에서 정의된 함수를 현재 컨텍스트에서 실행할 수 있도록 한다. 실행하고자 하는 함수의 첫번째 매개변수로 this를 전달하고 나머지는 실제 함수 실행에 필요한 인자들을 전달하면 된다.
+
+
+
+
