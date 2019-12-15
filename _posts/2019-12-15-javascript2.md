@@ -91,6 +91,67 @@ Promise는 아래와 같은 특징을 보장한다
 * 비동기 작업이 성공하거나 실패한 뒤에 then()을 이용하여 추가한 콜백의 경우에도 위와 같다.
 * then()을 여러번 사용하여 여러개의 콜백을 추가 할 수 있다. 그리고 각각의 콜백은 주어진 순서대로 하나 하나 실행된다.
 
+## Chaining
+
+then()함수는 새로운 promise를 반환한다. 처음 만들었던 promise와 다른 새로운 promise이다.
+```
+const promise = doSomething();
+const promise2 = promise.then(successCallback, failureCallback);
+```
+두번째 promise는 doSomething()뿐 아니라 successCallback or failureCallback의 완료를 의미한다.
+successCallback or failureCallback 또한 promise를 반환하는 비동기 함수일 수도 있다.
+이 경우 promise2에 추가 된 콜백은 succkessCallback 또는 failureCallback에 의해 반환된 promise뒤에 대기한다.
+
+기본적으로 각각의 promise는 체인 안에서 서로 다른 비동기 단계의 완료를 나타낸다.
+
+```
+doSomething().then(function(result) {
+  return doSomethingElse(result);
+})
+.then(function(newResult) {
+  return doThirdThing(newResult);
+})
+.then(function(finalResult) {
+  console.log('Got the final result: ' + finalResult);
+})
+.catch(failureCallback);
+```
+then에 넘겨지는 인자는 optional하다. 그리고 catch(failureCallback)은 then(null, failureaCallback)의 축약이다.
+이를 화살표 함수로 나타내면 다음과 같다
+```
+doSomething()
+.then(result => doSomethingElse(result))
+.then(newResult => doThirdThing(newResult))
+.then(finalResult => {
+  console.log(`Got the final result: ${finalResult}`);
+})
+.catch(failureCallback);
+```
+*** 반환값이 반드시 있어야한다. 만약 없다면 콜백함수가 이전의 promise의 결과를 받지 못한다.
+
+### chaining after a catch
+chain에서 작업이 실패한 후에도 새로운 작업을 수행하는 것이 가능하며 매우 유용하다.
+```
+new Promise((resolve, reject) => {
+    console.log('Initial');
+
+    resolve();
+})
+.then(() => {
+    throw new Error('Something failed');
+        
+    console.log('Do this');
+})
+.catch(() => {
+    console.log('Do that');
+})
+.then(() => {
+    console.log('Do this, whatever happened before');
+});
+```
+## Error propagation
+기본적으로 promise chain은 예외가 발생하면 멈추고 chain의 아래에서 catch를 찾는다. 
+
 
 
 # Function 생성자
