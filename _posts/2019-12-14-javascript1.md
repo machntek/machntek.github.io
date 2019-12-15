@@ -104,8 +104,7 @@ var aa = new test();
 객체.__proto__는 생성자함수.prototype에 대한 참조변수인듯.
 -> 프로토타입체인 가능
 
-전자는 개별 객체의 속성이며 후자는 생성자의 속성입니다. 이 말은 Object.getPrototypeOf(new Foobar())의 반환값이 Foobar.prototype과 동일한 객체라는 의미입니다.
-###프로토타입 속성:상속 받은 멤버들이 정의된 곳
+### 프로토타입 속성:상속 받은 멤버들이 정의된 곳
 Object.prototype.watch() -> Object를 상속받는 생성자들이 사용 가능
 Object.keys() -> 상속되지 않음. Object()생성자에서만 사용 가능
 
