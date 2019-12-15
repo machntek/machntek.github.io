@@ -15,6 +15,7 @@ tags:
 객체를 생성하는 방법은 변수에 바로 할당하는방법(object literal)
 -> var object1 = {}
 
+생성자 함수는 클래스의 자바스크립트 버전이다. 생성자 함수는 단순히 프로퍼티와 메소드를 정의한다.
 생성자함수를 사용하는 방법 (클래스를 생성하는게 아니라 함수에 new 연산자를 붙히면 바로 빈 객체(Object객체)가 생성된다)
 function object() {};
 var object2 = new object();
@@ -29,7 +30,9 @@ this는 객체 멤버의 컨텍스트가 바뀜에 따라 유연하게 적용된
 
 # 생성자
 
-함수 정의(생성자함수)  - 함수도 객체다.
+생성자로부터 새로운 객체 인스턴스가 생성되면, 객체의 핵심 기능이 프로토타입 체인에 의해 연결된다.
+
+함수 정의(생성자함수)  - 함수도 객체다.  함수명 첫글자 대문자로.
 ```
 function Person(name) {
   this.name = name;
@@ -84,14 +87,33 @@ person2가 person1을 기반으로 만들어짐. 새 객체는 원 객체와 같
 
 자바스크립트는 prototype-based language이다. 모든 객체들이 메소드와 속성들을 상속받기 위한 템플릿으로써 프로토타입객체를 가진다.
 상속되는 속성과 메소드들은 각 개체가 아니라 객체의 생성자의 prototype이라는 속성에 정의됨
+(Person생성자의 객체 person1은 Person.prototype을 상속받는다.)
 
 객체의 prototype( Object.getPrototypeOf(obj) 함수 또는 deprecated된 __proto__속성으로 접근 가능한 ) 과
 생성자의 prototype 속성의 차이를 인지하는 것은 중요.
 전자는 개별 객체의 속성이며 후자는 생성자의 속성입니다. 이 말은 Object.getPrototypeOf(new Foobar())의 반환값이 Foobar.prototype과 동일한 객체라는 의미입니다.
 
+생성자 함수를 정의하면 그 함수의 prototype이 생성된다
+```
+function test() {}
+var aa = new test();
+// test.prototype에 constructor와 __proto__존재
+// test생성자로 만들어진 객체는 test.prototype을 상속받음
+// aa.__proto__와 test.prototype이 동일
+```
+객체.__proto__는 생성자함수.prototype에 대한 참조변수인듯.
+-> 프로토타입체인 가능
+
+전자는 개별 객체의 속성이며 후자는 생성자의 속성입니다. 이 말은 Object.getPrototypeOf(new Foobar())의 반환값이 Foobar.prototype과 동일한 객체라는 의미입니다.
 ###프로토타입 속성:상속 받은 멤버들이 정의된 곳
 Object.prototype.watch() -> Object를 상속받는 생성자들이 사용 가능
 Object.keys() -> 상속되지 않음. Object()생성자에서만 사용 가능
+
+///
+프로토타입도 하나의 속성임.
+Object.prototype에 정의된것들을 상속
+Object.로 시작하는건 상속X
+///
 
 # 생성자 속성
 
