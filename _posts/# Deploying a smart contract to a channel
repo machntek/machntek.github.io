@@ -1,0 +1,79 @@
+# Deploying a smart contract to a channel
+
+## Package the samrt contract
+
+Go, Java, Javascript로 가능.
+1. 디펜던시 설치
+peer lifecycle chaincode package fabcar.tar.gz --path ../chaincode/fabcar/go/ --lang golang --label fabcar_1
+
+
+## Installing the chaincode package
+체인코드는 트랜잭션을 보증할 모든 피어에 인스톨돼야함. 
+```
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="Org1MSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+export CORE_PEER_ADDRESS=localhost:7051
+```
+peer lifecycle chaincode install fabcar.tar.gz
+
+
+
+## Approve a chaincode definition
+
+패키지ID로 체인코드 데피니션에 등록.
+> peer lifecycle chaincode queryinstalled
+로 나오는 패키지ID로 peer lifecycle chaincode approveformyorg 수행.
+> peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name fabcar --version 1.0 --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+
+--sequence는 체인코드가 정의or업데이트 된 횟수(순번)
+--init-required는 init function 수행 플래그
+
+endorsement policy로 --signature-policy와 --channel-config-policy 가능
+(몇명이 검증해야하는지 등 설정)
+
+너는 admin 롤로 체인코드 데피니션을 승인(approve)할 필요가 있다. 그래서, CODE_PEER_MSPCONFIGPATH변수는 admin아이덴티티를 포함한 MSP폴더를 가르킨다.
+클라이언트 유저의 체인코드정의는 승인할 수 없다.
+approval은 (어드민 서명을 검증하고 승인을 너의 피어로 배포하는) 오더링서비스에 제출돼야한다. 
+
+체인코드 정의 승인에 다수의 기관만 필요한 반면, 모든 기관이 체인코드 정의를 승인해야 그들의 피어에서 체인코드를 시작할 수 있다.
+While only a majority of organizations need to approve a chaincode definition (with the default policies), all organizations need to approve a chaincode definition to start the chaincode on their peers. 
+
+채널 멤버들이 체이노드를 승인하기 전에 definition을 커밋하면, 조직에서 트랜잭션을 승인할 수 없다. 그래서 커밋 전에 모든 채널 멤버가 체인코드 승인하기를 추천한다.
+
+## Commiting the chaincode definition to the channel
+충분한 수의 조직이 approve하면, 한 조직이 채널에 커밋할 수 있다.
+대부분의 채널 멤버가 정의를 승인 한 경우 커미트 트랜잭션이 성공하고 체인 코드 정의에서 동의 한 매개 변수가 채널에서 구현(implemented)됩니다.
+
+> peer lifecycle chaincode checkcommitreadiness --channelID mychannel --name fabcar --version 1.0 --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --output json
+=> {
+            "Approvals": {
+                    "Org1MSP": true,
+                    "Org2MSP": true
+            }
+    }
+
+커밋커맨드는 조직의 어드민에 의해 제출되야함
+> peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name fabcar --version 1.0 --sequence 1 --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+--peerAddresses 플래그로 피어를 타켓
+commit 커맨드는 체인코드 배포를 위한 정책 충족을 위해 충분한 숫자의 조직의 피어를 타겟으로 해야한다.
+approval이 각 조직사이에서 배포되므로, 채널멤버에 속하는 아무 피어나 타겟으로 할 수 있다.
+
+채널 멤버에 의한 체인코드 정의 endorsement는 오더링서비스에 제출된다(블록에 추가되고 채널에 배포하기 위해).
+그러면 채널의 피어는 충분한 수의 조직이 승인했는지 검증한다. peer lifecycle chaincode commit 커맨드는 이 검증이 끝나기를 기다린다.
+
+//체인코드 정의가 채널에 커밋됐는지 확인
+>peer lifecycle chaincode querycommitted --channelID mychannel --name fabcar --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+
+## Invoking the chaincode
+//인보크 커맨드는 endorsement policy를 충족하기 위해 충분한 수의 피어를 타겟으로 한다.
+> peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n fabcar --peerAddresses localhost:7051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt --peerAddresses localhost:9051 --tlsRootCertFiles ${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt -c '{"function":"initLedger","Args":[]}'
+
+체인코드 정의에서 --init-required 플래그를 줬기때문에, 첫 트랜잭션은 --isInit플래그로 체인코드 초기화를 해야한다.
+
+## Upgrading a smart contract
+
+체인코드 변경으로 업그레이드 or endorsement policy 변경으로 업그레이드 가능
+
+커밋트랜잭션 성공하면 새체인코드는 바로 시작된다. 체인코드 정의가 endorsement policy를 변경했다면, 새 정책은 효과가 있을것이다.

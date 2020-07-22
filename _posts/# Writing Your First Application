@@ -1,0 +1,78 @@
+# Writing Your First Application
+
+## Before you begin
+> sudo apt install build-essentials
+
+## Set up the blockchain network
+### Launch the network
+
+./startFabric.sh javascript
+
+이 네트워크는 2개의 피어 1개의 오더러 가짐. cryptogen대신 CA사용. 
+CA는 어플리케이션이 쓸 인증서와 키를 생성함.
+
+### Install the Application
+
+> cd ~/fabric/fabric-samples/fabcar/javascript
+> npm install
+
+디펜던시 중에 "fabric-network"가 있다. 이는 앱이 identities, wallets, 채널 게이트워에를 사용할 수 있게 하고, 트랜잭션 전송할수 있게하고, notifications를 기다리게 한다.
+"fabric-ca-client"는  그들의 대표 인증서 권한으로 유저를 등록하고, fabric-network클래스에서 쓸 유효한 identity를 생성한다.
+
+## Enrolling the admin user
+네트워크 생성할때, admin유저가 CA담당자로서 생성된다. 첫 단계는 admin유저의 개인키, 공개키, x509인증서를 생성하는것이다.(enroll.js사용)
+이 단계는 Certificate Signing Request(CSR)을 사용한다.
+-개인키와 공개키가 로컬에서 생성되고, 공개키는 CA로 보내진다. CA는 어플 사용을 위한 인코딩된 인증서를 리턴한다.
+이 자격들은 wallet에 저장돼고, 우리가 CA의 관리자가 될수 있게 한다.
+
+> node enrollAdmin.js
+그러면 wallet/admin.id에 admin의 인증서와 개인키가 생성된다.
+
+## Register and enroll an application user
+우리는 이제 새로운 어플리케이션 유저를 생성할 수 있다.
+> node registerUser.js
+
+## Querying the ledger
+각각의 피어는 원장의 카피를 갖고있다.
+가장 일반적인 쿼리는 원장 데이터의 현재 밸류를 포함한다-월드 스테이트라 함. 
+월드스테이트는 키밸류쌍으로 표시됨.
+게다가, 너가 너의 상태db로 카우치db를 쓰고, 너의 데이터를 json형태로 모델링한다면, 원장에 더욱 복잡한 쿼리를 날릴 수 있다.
+
+우선, query.js로 모든 차 리스트를 받아보자.
+
+query.js를 살펴보자
+fabric-network모듈에서 Wallets클래스와 Gateway클래스를 가져온다.
+wallet클래스로 우리 파일시스템에서 어플래케이션 유저를 가져온다.
+그렇게 가져온 identity로 Gateway클래스를 사용해 우리의 네트워크로 연결한다.
+
+connection profile 경로의 json파일로 네트워크 접속을 정의한다.
+
+네트워크는 여러개의 채널로 나눠질수있고, 아래의 라인이 네트워크의 특정 채널에 어플을 연결한다.
+const network = await gateway.getNetwork('mychannel');
+
+이 채널에서 우리는 fabcar 스마트컨트렉트에 접근가능하다.
+//const contract = network.getContract('fabcar');
+
+fabcar안에는 많은 트랜잭션들이 있고, 우리 앱은 원장의 월드스테이트데이터에 접근하기 위해 queryAllCars 트랜잭션을 초기사용한다.
+//const result = await contract.evaluateTransaction('queryAllCars');
+
+## The FabCar Smart contract
+fabcar스마트컨트랙트 안에 트랜잭션을 살펴보자.
+
+우리의 스마트컨트랙트는 Contract 클래스를 사용해 정의돼있다.(~ extends Contract)
+이 클래스안에 여러 트랜잭션(queryCar, createCar 등)이 정의돼있다.
+
+## Updating the ledger
+네트워크는 원장의 사본과 스마트컨트랙의 사본을 각각 호스팅하는 여러 피어뿐만 아니라 오더링서비스도 포함한다.
+오더링서비스는 네트워크를 위해 트랜잭션을 조정한다;네트워크에 연결된 모든 다른 앱에서 시작하여 잘 정의된 순서로 트랜잭션을 포함하는 블록을 만듭니다.
+
+submitTransaction은 evaluateTransaction보다 더 복잡하다. 싱글피어랑 상호작용하지 않고, 모든 필요한 조직의 피어에게 proposal을 보낸다.
+각각의 피어는 이 프로포절을 사용하여 요청된 스마트컨트랙를 실행한다. 그리고 사인된 응답을 SDK에게 보낸다.
+SDK는 모든 사인된 트랜잭션 응답을 싱글 트랜잭션으로 모은다.->그리고 오더러에게 보낸다.
+오더러는 트랜잭션을 모으고 순서를 매긴다. 그리고 이 블록들을 네트워크의 모든 피어에게 배포한다.
+결국, sdk에 알림이 전달되어 제어권을 응용 프로그램으로 되돌릴 수 있습니다.
+
+ !submitTransaction은 트랜잭션이 검증되고 원장에 커밋됐는지 확인하는 리스너를 포함한다. 어플리케이션은 커밋리스너를 사용하거나 submitTransaction같은 api를 사용해야한다.
+
+애플리케이션, 스마트 계약, 피어 및 주문 서비스가 함께 작동하여 네트워크에서 원장을 일관되게 유지하는 프로세스를 합의라고한다.
+

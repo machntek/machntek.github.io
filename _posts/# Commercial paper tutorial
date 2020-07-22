@@ -1,0 +1,98 @@
+# Commercial paper tutorial
+
+## Create the network
+프로덕션 환경에서, 조직은 이미 있는(타 시스템과 공유하는) CA를 사용한다.-패브릭 전용 CA가 아님
+
+Org1은 DigiBank, Org2는 MagnetoCorp
+
+```
+$ docker ps
+
+CONTAINER ID        IMAGE                               COMMAND                  CREATED             STATUS              PORTS                                        NAMES
+321cc489b10f        hyperledger/fabric-peer:latest      "peer node start"        2 minutes ago       Up 2 minutes        0.0.0.0:7051->7051/tcp                       peer0.org1.example.com
+ad668671f95f        hyperledger/fabric-peer:latest      "peer node start"        2 minutes ago       Up 2 minutes        7051/tcp, 0.0.0.0:9051->9051/tcp             peer0.org2.example.com
+caadbe4d8592        hyperledger/fabric-couchdb          "tini -- /docker-ent…"   2 minutes ago       Up 2 minutes        4369/tcp, 9100/tcp, 0.0.0.0:7984->5984/tcp   couchdb1
+ebabe52903b8        hyperledger/fabric-couchdb          "tini -- /docker-ent…"   2 minutes ago       Up 2 minutes        4369/tcp, 9100/tcp, 0.0.0.0:5984->5984/tcp   couchdb0
+7c72711c6e18        hyperledger/fabric-orderer:latest   "orderer"                2 minutes ago       Up 2 minutes        0.0.0.0:7050->7050/tcp                       orderer.example.com
+```
+
+위의 컨테이너는 'net_test'라는 도커네트워크에 포함됨
+네트워크 보려면 docker network 명령 실행
+> docker network inspect net_test
+
+## Monitor the network as MagnetoCorp
+블록체인 네크워크 모니터링
+
+## Examine the commercial paper smart contract
+papeercontract.js는 스마트컨트랙을 포함한 nodejs 소스이다.
+
+## Deploy the smart contract to the channel
+papeercontract가 invoke되기 전에, 그것은 먼저 적절한 피어에 설치되고, fabric chaincode lifecycle을 사용하여 채널에 정의돼야 한다.
+체인코드라이프사이클은 다수의 조직이 체인코드의 매개변수의 동의하도록 한다.(채널에 배포돼기 전에)
+Smart contracts are the focus of application development, and are contained within a Hyperledger Fabric artifact called chaincode. 
+
+## Install and approve the smart contract as MagnetoCorp
+magnetocorp의 어드민으로 peer cli 실행하기 전에 환경변수 셋팅해야 한다.
+> source magnetocorp.sh
+
+스마트컨트랙트를 체인코드로 패키징하자
+> peer lifecycle chaincode package cp.tar.gz --lang node --path ./contract --label cp_0
+
+스마트 컨트랙트 인스톨
+> peer lifecycle chaincod einstall cp.tar.gz
+
+스마트 컨트랙트 approve
+>peer lifecycle chaincode approveformyorg --orderer localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name papercontract -v 0 --package-id $PACKAGE_ID --sequence 1 --tls --cafile $ORDERER_CA
+채널멤버가 동의해야하는 가장 중요한 파라미터는 체인코드 endorsement policy이다.
+이는 유효한 트랜잭션이 되기 위해 반드시 보증해야 하는 조직의 셋 정보를 갖고있다.
+--policy 플래그 없이 approve하면 디폴트 endorsement policy가 적용된다.(디폴트는 다수의 동의를 얻어야함)
+유효하던 아니던, 모든 트랜잭션은 원장 블록체인에 기록된다. 그러나 유효한 트랜잭션만 월드스테이트로 업데이트된다.
+
+## Install and approve the smart contract as DigiBank
+위에 MagnetoCorp에서 했던일 또 해야함.
+
+## Commit the chaincode definition to the channel
+체인코드가 채널에 정의되기만 하면, commercialPaper 스마트컨트렉트는 invoke 될수있다.
+둘 중 아무나 채널에 체인코드를 commit할 수 있다.
+
+디지뱅크 어드민이 채널에 commit하면, papaercontract를 실행하기 위해새로운 도커컨테이너 양 피어에 뜰거다.
+> peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --peerAddresses localhost:7051 --tlsRootCertFiles ${PEER0_ORG1_CA} --peerAddresses localhost:9051 --tlsRootCertFiles ${PEER0_ORG2_CA} --channelID mychannel --name papercontract -v 0 --sequence 1 --tls --cafile $ORDERER_CA --waitForEvent
+
+
+## Application structure
+Isabela가 issue.js어플리케이션으로 스마트컨트렉트 콜.
+issue어플은 그녀의 월렛에서 x.509인증서(로컬파일시스템 혹은 HSM,Hardware Security Moduel에 저장)를 가져온다.
+패브릭sdk는 어플리케이션이 로직에 집중할 수 있도록 게이트웨이 추상을 제공한다.(네트워크 인터렉션은 게이트웨이에 위임)
+Gateway abstraction이 통신함.
+
+> await gateway.connect(connectionProfile, connectionOptions);
+../gateway/networkConnection.yaml에서 게이트웨이 identity 정의됨.
+
+```
+const network = await gateway.getNetwork('mychannel');
+const contract = await network.getContract('papercontract');
+let paper = CommercialPaper.fromBuffer(issueResponse);
+```
+
+## Application dependencies
+
+## Wallet
+issue.js를 실행해서 어음00001을 발행하기 위해 한단계 남았다. isabella가 수행하기 때문에, 그녀의 월렛에서 신분을 사용한다.
+우리는 이 작업을 한번만 한다.(적절한 x509인증서 크레덴셜을 그녀의 월렛에 추가하는 작업)
+
+addToWallet.js는 단순한 파일카핑 프로그램이다.
+그것은 신분을 테스트네트워크 샘플에서 이사벨라의 월렛으로 옮긴다. 
+
+그녀의 월렛에 다수의 identity를 넣을 수 있다.(예제에서는 하나만 사용)
+> cat isabella.id
+privateKey는 트랜잭션에 싸인하기 위함
+certificate는 이사벨라의 공개키와 x.509 속성을 가짐. 이 인증서는 네트워크에 배포될 수 있고, 그래서 이사벨라의 개인키로 생성된 정보를 검증할 수 있다.
+
+## Issue application
+
+## Digibank application
+
+## Run as Digibank
+wallet 발행
+
+## Buy application

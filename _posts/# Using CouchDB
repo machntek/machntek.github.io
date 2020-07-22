@@ -1,0 +1,300 @@
+# Using CouchDB
+
+카우치db는 상태db로 사용.
+
+## Why CouchDB?
+패브릭은 두 종류의 피어db를 지원한다. LevelDB는 피어에 내장된 기본 상태db다
+레벨DB는 체인코드데이터를 키-밸류쌍으로 저장하고 key, key범위, 복합key쿼리만 지원한다.
+카우치db는 옵셔널임. 이는 너가 원장에 데이터를 json으로 모델링하게 도와주고, 키가 아닌 데이터값에 대해 리치쿼리를 발행한다.
+카우치db는 또한 너의 체인코드와 함께 인덱스를 배포해서 쿼리를 더욱 효율적이게 하고, 거대한 데이터셋을 쿼리할 수 있게 한다.
+
+카우치db의 이점을 활용하기 위해, 너의 데이터는 json포맷으로 모델링돼야함.
+네트워크 셋팅전에 어떤db쓸지 결정해야한다. 네트워크상의 모든 피어는 같은 db타입을 사용해야한다.
+만일 너가 json과 binary데이터 값의 합성본을 갖고 있다면, 카우치db를 쓸 수 있다. 하지만 바이너리값은 key, 키범위, 복합키 쿼리 기반으로만 질의 가능하다.
+
+## Enable CouchDB in Hyperledger Fabric
+카우치db는 peeer와 별개의 db프로세스로 실행된다. 설치, 관리, 운영에 대하 추가의 고려사항이 있다.
+core.yaml에있는 구성을 CouchDB 컨테이너를 가리 키도록 변경하여 피어 당 하나의 CouchDB 컨테이너를 설정하고 각 피어 컨테이너를 업데이트해야합니다.
+***core.yaml파일은 FABRIC_CFG_PATH환경변수에 기술된 곳에 위치해야한다.
+
+- 도커 배포를 위해, core.yaml은 미리 설정돼야하고, 각 피어컨테이너의 FABRIC_CFG_PATH폴더에 위치해야한다. 그러나 도커 환경을 사용할때, 넌 일반적으로 docker-compose-couch.yaml을 편집하여 core.yaml을 재정의하여 환경변수를 전달할 수 있다.
+- 네이티브 바이너리 배포의 경우 core.yaml이 릴리스 아티팩트 배포에 포함됩니다.
+
+core.yaml의 stateDatabase부분을 변경하라. CouchDB를 stateDatabase로 지정하고 연관된 couchDBConfig 특성을 채우십시오.
+
+## Create an index
+인덱스는 DB가 모든 쿼리에 모든 row를 탐색하지 않게 해주며, 더 빠르고 효율적이게 한다.
+일반적으로 인덱스는 자주 발생하는 쿼리 기준에 맞게 작성되어 데이터를보다 효율적으로 쿼리 할 수 있습니다.
+JSON 데이터에 대해 풍부한 쿼리를 수행 할 수있는 CouchDB의 주요 이점을 활용하기 위해 인덱스는 필요하지 않지만 성능에는 강력히 권장됩니다. 또한 쿼리에서 정렬이 필요한 경우 CouchDB에는 정렬 된 필드의 인덱스가 필요합니다.
+
+! 인덱스가 없는 리치쿼리는 작동하지만 카우치db로그에 인덱스가 없다고 warning을 던진다. 그러나 리치 조회에 정렬 스펙이 포함 된 경우 해당 필드의 색인이 필요합니다. 그렇지 않으면 쿼리가 실패하고 오류가 발생합니다.
+
+index설정 예시를 위해 다음 marbles데이터구조를 보자
+```
+type marble struct {
+         ObjectType string `json:"docType"` //docType is used to distinguish the various types of objects in state database
+         Name       string `json:"name"`    //the field tags are needed to keep case from bouncing around
+         Color      string `json:"color"`
+         Size       int    `json:"size"`
+         Owner      string `json:"owner"`
+}
+```
+docType 속성은 개별적으로 쿼리해야하는 다른 데이터 유형을 구별하기 위해 체인 코드에서 사용되는 패턴입니다.
+
+CouchDB를 사용하는 경우 체인 코드 네임 스페이스에서 각 문서 유형을 구별하기 위해이 docType 속성을 포함하는 것을 권장합니다.(각 체인 코드는 자체 CouchDB 데이터베이스로 표시됩니다. 즉, 각 체인 코드에는 키에 대한 자체 네임 스페이스가 있습니다.)
+Marbles 데이터 구조와 관련하여 docType은 이 문서 / 자산이 marble 자산임을 식별하는 데 사용됩니다. 체인 코드 데이터베이스에 다른 문서 / 자산이있을 수 있습니다. 데이터베이스의 문서는 이러한 모든 속성 값에 대해 검색 가능합니다.
+체인 코드 쿼리에 사용할 인덱스를 정의 할 때 각각은 확장자가 * .json 인 고유 한 텍스트 파일로 정의되어야하며 인덱스 정의는 CouchDB 인덱스 JSON 형식으로 포맷되어야합니다.
+
+인덱스를 정의하기 위해, 3가지가 필요합니다.
+- fields : 자주 쿼리되는 필드
+- name : 인덱스의 이름
+- type : 이 문맥에서 항상 json임
+
+예를 들어, foo라는 필드에 대한 인덱스 foo-index이다.
+```
+{
+    "index": {
+        "fields": ["foo"]
+    },
+    "name" : "foo-index",
+    "type" : "json"
+}
+```
+선택적으로 디자인 문서 속성 ddoc을 인덱스 정의에 지정할 수 있습니다. 디자인 문서는 인덱스를 포함하도록 설계된 CouchDB 구조입니다. 효율성을 위해 인덱스를 디자인 문서로 그룹화 할 수 있지만 CouchDB는 디자인 문서 당 하나의 인덱스를 권장합니다.
+! 인덱스을 정의 할 때 색인 이름과 함께 ddoc 속성 및 값을 포함하는 것이 좋습니다. 필요한 경우 나중에 인덱스를 업데이트 할 수 있도록이 속성을 포함해야합니다. 또한 쿼리에 사용할 인덱스를 명시 적으로 지정할 수 있습니다.
+
+다음은 여러 필드 docType 및 owner를 사용하고 인덱스 이름이 indexOwner 인 Marbles 샘플의 인덱스 정의에 대한 또 다른 예이며 ddoc 속성을 포함합니다.
+```
+{
+  "index":{
+      "fields":["docType","owner"] // Names of the fields to be queried
+  },
+  "ddoc":"indexOwnerDoc", // (optional) Name of the design document in which the index will be created.
+  "name":"indexOwner",
+  "type":"json"
+}
+```
+
+위의 예제에서, 디자인 문서 indexOwnerDoc이 존재하지 않는 경우 인덱스가 배치 될 때 자동으로 작성됩니다.
+필드 목록에 지정된 하나 이상의 속성으로 색인을 구성 할 수 있으며 속성 조합을 지정할 수 있습니다.
+속성은 동일한 docType에 대해 여러 색인에 존재할 수 있습니다. 다음 예에서 index1은 속성 소유자 만 포함하고 index2는 속성 소유자와 색상을 포함하며 index3은 속성 소유자, 색상 및 크기를 포함합니다.
+또한 CouchDB 권장 사례에 따라 각 인덱스 정의에는 고유 한 ddoc 값이 있습니다.
+
+```
+{
+  "index":{
+      "fields":["owner"] // Names of the fields to be queried
+  },
+  "ddoc":"index1Doc", // (optional) Name of the design document in which the index will be created.
+  "name":"index1",
+  "type":"json"
+}
+
+{
+  "index":{
+      "fields":["owner", "color"] // Names of the fields to be queried
+  },
+  "ddoc":"index2Doc", // (optional) Name of the design document in which the index will be created.
+  "name":"index2",
+  "type":"json"
+}
+
+{
+  "index":{
+      "fields":["owner", "color", "size"] // Names of the fields to be queried
+  },
+  "ddoc":"index3Doc", // (optional) Name of the design document in which the index will be created.
+  "name":"index3",
+  "type":"json"
+}
+```
+일반적으로 쿼리 필터 및 정렬에 사용될 필드와 일치하도록 인덱스 필드를 모델링해야합니다.
+
+Fabric은 인덱스 워밍이라는 패턴을 사용하여 데이터베이스의 문서를 인덱싱합니다.
+CouchDB는 일반적으로 다음 쿼리까지 새 문서 나 업데이트 된 문서를 색인화하지 않습니다. 
+모든 데이터블럭이 커밋된 후, 패브릭은 인덱스 업데이트 요청을 통해 인덱스들이 warm상태로 남게 둔다.
+이렇게하면 쿼리를 실행하기 전에 문서를 인덱싱 할 필요가 없으므로 쿼리가 빠릅니다. 
+이 프로세스는 새로운 레코드가 상태 데이터베이스에 추가 될 때마다 색인을 최신 상태로 유지하고 새로 고칩니다.
+
+## Add the index to your chaincode folder
+인덱스를 마무리 지었으면, 적절한 메타데이터 폴더에 넣음으로서, 너의 체인코드와 함께 패키지해야한다.
+너는 peer lifecycle chaincode 커맨드로 체인코드를 설치할 수 있다.
+json인덱스 파일은 META-INF/statedb/couchdb/indexes 위치에 반드시 위치해야한다. 그 경로는 체인코드가 있는 디렉터리에 위치한다.
+
+### Start the network
+
+````
+cd fabric-samples/test-network
+./network.sh down
+
+cd ../chaincode/marbles02/go
+GO111MODULE=on go mod vendor
+cd ../../../test-network
+
+./network.sh up createChannel -s couchdb
+````
+
+## Install and define the chaincode
+트랜잭션을 실행하고 보증할 모든 피어에 체인코드가 설치돼야한다. 그러나, 우리의 체인코드와 interact하기 전에, 채널의 멤버들은 체인코드 정책을 정하는 체인코드 definition에 동의해야 한다.
+지난 섹션에서 우리는 체인코드와 함께 인덱스를 배포할 수 있도록 체인코드폴더에 index추가하는 방법을 설명했다.
+
+체인코드가 설치되기 전에 패키징돼야한다.
+
+1. 테스트네트워크 실행 후에, Org1어드민에 대한 환경변수 셋팅해라.
+```
+export PATH=${PWD}/../bin:${PWD}:$PATH
+export FABRIC_CFG_PATH=${PWD}/../config/
+export CORE_PEER_TLS_ENABLED=true
+export CORE_PEER_LOCALMSPID="Org1MSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+export CORE_PEER_ADDRESS=localhost:7051
+```
+
+2. 체인코드 패키징. 
+```
+peer lifecycle chaincode package marbles.tar.gz --path ../chaincode/marbles02/go --lang golang --label marbles_1
+```
+
+3. 체인코드 설치
+```
+peer lifecycle chaincode install marbles.tar.gz
+
+```
+```정상응답
+2019-04-22 18:47:38.312 UTC [cli.lifecycle.chaincode] submitInstallProposal -> INFO 001 Installed remotely: response:<status:200 payload:"\nJmarbles_1:0907c1f3d3574afca69946e1b6132691d58c2f5c5703df7fc3b692861e92ecd3\022\tmarbles_1" >
+2019-04-22 18:47:38.312 UTC [cli.lifecycle.chaincode] submitInstallProposal -> INFO 002 Chaincode code package identifier: marbles_1:0907c1f3d3574afca69946e1b6132691d58c2f5c5703df7fc3b692861e92ecd3
+```
+
+4. 설치된 체인코드의 패키지 id 쿼리.
+```
+peer lifecycle chaincode queryinstalled
+```
+
+5. 패키지ID를 환경변수로 셋팅.
+```
+export CC_PACKAGE_ID=marbles_1:3f6df3893baa8955270639401f3eeebac3622f15dfdc58c29f48abae3dfc0eff
+````
+
+6. Org1의 마블체인코드 정의 승인
+```
+export ORDERER_CA=${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name marbles --version 1.0 --signature-policy "OR('Org1MSP.member','Org2MSP.member')" --init-required --package-id $CC_PACKAGE_ID --sequence 1 --tls --cafile $ORDERER_CA
+```
+```정상응답
+2020-01-07 16:24:20.886 EST [chaincodeCmd] ClientWait -> INFO 001 txid [560cb830efa1272c85d2f41a473483a25f3b12715d55e22a69d55abc46581415] committed with status (VALID) at
+```
+채널에 커밋되기 전에 다수 조직의 체인코드정의 승인이 필요하다. 이는 org2의 승인이 필요함을 암시한다. Org2의 보증, 설치, 패키지ID는 하지 않는다.
+
+7. Org2어드민으로 CLI동작.
+```
+export CORE_PEER_LOCALMSPID="Org2MSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp
+export CORE_PEER_ADDRESS=localhost:9051
+```
+
+8. Org2로 체인코드 정의 승인
+```
+peer lifecycle chaincode approveformyorg -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name marbles --version 1.0 --signature-policy "OR('Org1MSP.member','Org2MSP.member')" --init-required --sequence 1 --tls --cafile $ORDERER_CA
+```
+
+9. 채널에 체인코드정의 커밋
+```
+export ORDERER_CA=${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem
+export ORG1_CA=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+export ORG2_CA=${PWD}/organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls/ca.crt
+peer lifecycle chaincode commit -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name marbles --version 1.0 --sequence 1 --signature-policy "OR('Org1MSP.member','Org2MSP.member')" --init-required --tls --cafile $ORDERER_CA --peerAddresses localhost:7051 --tlsRootCertFiles $ORG1_CA --peerAddresses localhost:9051 --tlsRootCertFiles $ORG2_CA
+```
+```정상응답
+2019-04-22 18:57:34.274 UTC [chaincodeCmd] ClientWait -> INFO 001 txid [3da8b0bb8e128b5e1b6e4884359b5583dff823fce2624f975c69df6bce614614] committed with status (VALID) at peer0.org2.example.com:9051
+2019-04-22 18:57:34.709 UTC [chaincodeCmd] ClientWait -> INFO 002 txid [3da8b0bb8e128b5e1b6e4884359b5583dff823fce2624f975c69df6bce614614] committed with status (VALID) at peer0.org1.example.com:7051
+```
+
+10. 마블체인코드가 초기화함수를 가지므로, 다른 함수를 쓰기 전에 Init()을 인보크해줘야 한다.
+```
+peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --channelID mychannel --name marbles --isInit --tls --cafile $ORDERER_CA --peerAddresses localhost:7051 --tlsRootCertFiles $ORG1_CA -c '{"Args":["Init"]}'
+```
+
+### Verify index was deployed
+체인코드가 각 피어에 설치되고 채널에 배포되면, 인덱스들은 각 피어의 카우치db에 배포된다.
+너는 도커컨테이너의 peer로그를 검사하여 이를 검증할 수 있다.
+
+도커컨테이너 로그를 보기 위해, 다음을 실행하여 확인하라
+```
+docker logs peer0.org1.example.com  2>&1 | grep "CouchDB index"
+```
+```정상응답
+[couchdb] CreateIndex -> INFO 0be Created CouchDB index [indexOwner] in state database [mychannel_marbles] using design document [_design/indexOwnerDoc]
+```
+
+## Query the CouchDB State database
+인덱스는 json파일에 정의되고 체인코드와 함께 배포됐으므로, 체인코드함수는 카우치db에 json쿼리를 실행할 수 있다. 그러므로, 피어커맨드는 체인코드 함수를 invoke 할 수 있다.
+
+쿼리에 인덱스이름을 기술하는거는 선택이다. 인덱스를 기술하지 않거나, 쿼리되는 필드에 대한 인덱스가 이미 있는 경우, 존재하는 인덱스가 자동적으로 사용된다.
+
+!use_index 키워드를 사용하여 쿼리에 인덱스 이름을 명시 적으로 포함시키는 것이 좋습니다. 그것이 없으면 CouchDB는 덜 최적의 인덱스를 선택할 수 있습니다. 또한 CouchDB는 인덱스를 전혀 사용하지 않을 수 있으며 적은 양으로 테스트하는 인덱스가 사용되지 않는걸 알아채지 못할 수도 있습니다. 볼륨이 클때만 낮은 성능을 인지할 것입니다.
+
+### Build the query in chaincode
+체인코드에 정의된 쿼리를 사용하여 복잡한 리치쿼리를 수행할 수 있다.
+marbles02샘플은 2개의 리치쿼리 함수를 갖고있다.
+
+- queryMarbles : ad hoc 리치쿼리의 예제. 문자열을 함수에 전달할 수 있는 쿼리다. 이는 동적으로 그들의 selector를 런타임에 빌드하는 클라이언트앱에 유용하다.
+- queryMarblesByOwner : 쿼리로직이 체인코드에 녹여진 parameterized query의 예제. 이 경우, 함수는 marble owner 필드인 단일 아규먼트를 받는다. 그런 다음 JSON 쿼리 구문을 사용하여 docType이 "marble"및 소유자 ID와 일치하는 JSON 문서에 대한 상태 데이터베이스를 쿼리합니다.
+
+### Run the query using the peer command
+우리는 peer chaincode query 커맨드를 커스터마이즈 해서 indexOnwer 인덱스를 사용하고, queryMarbles함수를 사용하여 오너가 tom인 마블을 질의할 거다.
+
+오너가 tom인 데이터를 넣자.
+```
+export CORE_PEER_LOCALMSPID="Org1MSP"
+export CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
+export CORE_PEER_MSPCONFIGPATH=${PWD}/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp
+export CORE_PEER_ADDRESS=localhost:7051
+peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer.example.com --tls --cafile ${PWD}/organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp/tlscacerts/tlsca.example.com-cert.pem -C mychannel -n marbles -c '{"Args":["initMarble","marble1","blue","35","tom"]}'
+```
+체인코드 초기화때 인덱스가 배포된 후, 이는 체인코드 쿼리에 자동적으로 쓰여진다.
+couchDB는 쿼리되는 필드에 기초하여 어떤 인덱스를 쓸지 결정한다. 만일 쿼리기준에 대한 인덱스가 있으면 인덱스가 사용된다. 하지만 권장하는 접근방법은 use_index키워드를 쿼리에 기술하는거다. 
+아래의 peer 명령은 use_index 키워드를 포함하여 selector 구문에서 명시 적으로 색인을 지정하는 방법의 예입니다.
+````
+// Rich Query with index name explicitly specified:
+peer chaincode query -C mychannel -n marbles -c '{"Args":["queryMarbles", "{\"selector\":{\"docType\":\"marble\",\"owner\":\"tom\"}, \"use_index\":[\"_design/indexOwnerDoc\", \"indexOwner\"]}"]}'
+```
+위의 query 명령을 살펴보면 다음과 같은 세 가지 인수가 필요합니다.
+
+1. queryMarbles
+  마블체인코드의 함수 이름. shim.ChaincodeStubInterface가 원장을 수정하고 접근하는데 이용된다.
+  getQueryResultForQueryString()은 shim API getQueryResult()에 쿼리스트링을 전달한다.
+  ```
+  func (t *SimpleChaincode) queryMarbles(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
+        //   0
+        // "queryString"
+         if len(args) < 1 {
+                 return shim.Error("Incorrect number of arguments. Expecting 1")
+         }
+
+         queryString := args[0]
+
+         queryResults, err := getQueryResultForQueryString(stub, queryString)
+         if err != nil {
+               return shim.Error(err.Error())
+         }
+         return shim.Success(queryResults)
+  }
+  ```
+2. {"selector":{"docType":"marble","owner":"tom"}
+  다음은 소유자 속성이 tom 인 마블 타입의 모든 문서를 찾는 임시 selector 문자열의 예입니다.
+
+3. "use_index":["_design/indexOwnerDoc", "indexOwner"]
+  디자인 문서 이름 indexOwnerDoc과 인덱스 이름 indexOwner를 모두 지정합니다. 
+  이 예제에서 selector 쿼리는 use_index 키워드를 사용하여 색인 이름을 명시 적으로 포함합니다. 
+  그것은 design doc, "ddoc" : "indexOwnerDoc"을 포함합니다.
+  CouchDB를 사용하여 쿼리에 인덱스 이름을 명시 적으로 포함 시키려면 인덱스 정의에 ddoc 값이 포함되어야하고, 그러면 그것은 use_index 키워드로 참조 될 수 있습니다.
+
+쿼리의 결과는 다음과 같다
+```
+Query Result: [{"Key":"marble1", "Record":{"color":"blue","docType":"marble","name":"marble1","owner":"tom","size":35}}]
+```
+
+## Use best practices for queries and indexes
