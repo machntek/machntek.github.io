@@ -298,3 +298,53 @@ Query Result: [{"Key":"marble1", "Record":{"color":"blue","docType":"marble","na
 ```
 
 ## Use best practices for queries and indexes
+
+인덱스를 쓰는 쿼리들은 카우치DB를 풀스캔하지 않아서 더 빠르다. 인덱스들이 너에게 더 나은 성능의 쿼리를 작성하고, 너의 어플이 많은 양의 데이터나 블록을 다룰 수 있게 해준다.
+체인코드로 설치하는 인덱스들을 계획하는 것도 중요하다. 대부분의 쿼리를 지원하는 체인코드당 몇개의 인덱스만 설치해야 한다. 너무 많은 인덱스를 추가하거나, 인덱스에 과도한 수의 필드를 사용하면 네트워크 성능이 저하된다.
+이는 각 블록들이 커밋된 후에 인덱스들이 업데이트되기 때문이다. 더 많은 인덱스들이 "index warming"을 통해 업데이트 되야 할수록, 트랜잭션을 완료하는데 시간이 더 오래걸린다.
+이 섹션의 예제는 쿼리에서 인덱스를 사용하는 방법과 최상의 성능을 제공하는 쿼리 유형을 보여준다. 쿼리를 작성할 때 다음을 기억하라.
+
+- 인덱스를 사용하려면 인덱스의 모든필드가 쿼리의 selector 또는 sort section에 있어야한다.
+- 복잡한 쿼리일수록 성능이 떨어지고 인덱스를 사용할 가능성이 줄어든다.
+- $or, $in, $regex와 같은 전체 테이블 스캔 또는 전체 인덱스 스캔을 초래하는 연산자를 피해야한다.
+
+이 튜토리얼의 이전부분에서, 마블체인코드에 아래와 같은 쿼리를 발행했다.
+
+```
+// Example one: query fully supported by the index
+export CHANNEL_NAME=mychannel
+peer chaincode query -C $CHANNEL_NAME -n marbles -c '{"Args":["queryMarbles", "{\"selector\":{\"docType\":\"marble\",\"owner\":\"tom\"}, \"use_index\":[\"indexOwnerDoc\", \"indexOwner\"]}"]}'
+```
+
+마블 체인코드는 indexOwnerDoc 인덱스와 함께 설치됐다.
+```
+{"index":{"fields":["docType","owner"]},"ddoc":"indexOwnerDoc", "name":"indexOwner","type":"json"}
+```
+
+쿼리의 모든 필드 docType가 owner가 쿼리를 완전히 지원하면서 인덱스에 포함돼있다. 결과적으로 이 쿼리는 풀스캔하지않고 인덱스의 데이터를 사용할 수 있다. 이와 같은 완전히 지원되는 쿼리는 체인 코드의 다른 쿼리보다 빠르게 반환된다.
+
+만일 위의 쿼리에 다른 필드를 추가하면, 여전히 인덱스를 사용할 것이다. 하지만 쿼리에서 추가 필드에 대해 인덱싱 된 데이터를 스캔해야 하므로 응답 시간이 더 길어진다.
+예로, 아래의 쿼리는 여전히 인덱스를 사용하지만, 위의 샘플보다 시간이 오래걸린다.
+```
+// Example two: query fully supported by the index with additional data
+peer chaincode query -C $CHANNEL_NAME -n marbles -c '{"Args":["queryMarbles", "{\"selector\":{\"docType\":\"marble\",\"owner\":\"tom\",\"color\":\"red\"}, \"use_index\":[\"/indexOwnerDoc\", \"indexOwner\"]}"]}'
+```
+
+인덱스의 모든 필드를 포함하지 않는 쿼리는 대신 전체DB를 스캔해야한다. 예로, 아래의 쿼리는 소유한(owned) 아이템의 타입을 지정하지 않고 owner를 검색한다.
+ownerIndexDoc은 owner와 docType필드를 모두 포함하기 때문에, 이 쿼리는 인덱스를 사용할 수 없다.
+```
+// Example three: query not supported by the index
+peer chaincode query -C $CHANNEL_NAME -n marbles -c '{"Args":["queryMarbles", "{\"selector\":{\"owner\":\"tom\"}, \"use_index\":[\"indexOwnerDoc\", \"indexOwner\"]}"]}'
+```
+
+일반적으로, 쿼리가 복잡할수록 응답시간이 길어지고, 인덱스의 도움을 받을 확률이 적어진다. $or, $in, $regex 같은 연산자는 종종 인덱스 풀스캔을 야기하거나 인덱스를 사용하지 않는다.
+
+예로, 아래의 쿼리는 모든 마블 및 tom이 소유한 모든 아이템을 검색하는 $or 용어가 포함된다.
+```
+// Example four: query with $or supported by the index
+peer chaincode query -C $CHANNEL_NAME -n marbles -c '{"Args":["queryMarbles", "{\"selector\":{\"$or\":[{\"docType\":\"marble\"},{\"owner\":\"tom\"}]}, \"use_index\":[\"indexOwnerDoc\", \"indexOwner\"]}"]}'
+```
+
+이 쿼리는 indexOwnerDoc에 포함 된 필드를 검색하기 때문에 여전히 인덱스를 사용한다. 하지만, 쿼리의 $or조건은 인덱스의 모든 항목을 스캔해야 하므로 응답시간이 길어진다.
+
+
