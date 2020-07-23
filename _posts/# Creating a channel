@@ -1,0 +1,29 @@
+# Creating a channel
+
+에셋을 생성하고 전송하기 위해선, 조직이 채널에 참여해야한다. 채널은 특정 조직간에 통신의 프라이빗한 레이어이고, 네트워크의 다른멤버들에게 보이지 않는다.
+각 채널은 채널 멤버만 읽고 쓸수 있는 별도의 원장으로 구성된다. 그 멤버들은 그들의 피어를 채널에 참여하고 오더링 서비스로부터 트랜잭션의 새 블록들을 받도록 허용된다.
+피어들과 노드들, 인증기관들이 물리적인 네트워크 인프라를 구성하는 반면, 채널은 조직이 서로 연결하고 상호 작용하는 프로세스입니다.
+
+패브릭의 운영 및 거버넌스에서 채널이 수행하는 근본적인 역할 때문에, 채널이 생성되는 다양한 관점을 튜토리얼로 커버할거다.
+
+Creating a new channel은 네트워크 어드민이 수행해야 하는 동작 과정이다.
+
+# Creating a new channel
+
+## Setting up the configtxgen tool
+채널들은 채널생성 트랜잭션 빌드와 오더링 서비스에 트랜잭션 전송으로 만들어진다.
+채널 생성 트랜잭션은 채널의 초기 구성을 지정하며 오더링 서비스에서 채널 제네시스 블록을 작성하는 데 사용됩니다.
+채널생성 트랜잭션 파일을 수동으로 빌드하는게 가능하지만, configtxgen툴이 더 간편하다.
+툴은 채널의 구성을 정의하는 configtx.yaml파일을 읽은 다음, 관련 정보를 채널 생성 트랜잭션에 기록하여 작동합니다.
+configtx.yaml파일에 대해 얘기하기 전에, 우리는 configtxgen툴을 다운&셋팅 할 수 있다.
+
+configtxgen은 fabric-samples레포지터리에 다른 툴들과 함께 bin폴더에다운된다.
+
+```준비작업
+cd fabric-samples/test-network
+export PATH=${PWD}/../bin:$PATH
+export FABRIC_CFG_PATH=${PWD}/configtx //configtx.yaml파일 위치
+configtxgen --help
+```
+
+## The configtx.yaml file
