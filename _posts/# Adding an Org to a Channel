@@ -1,0 +1,80 @@
+# Adding an Org to a Channel
+
+이 튜토리얼은 Org3를 채널에 추가하는거다.
+채널에 새 조직을 추가하는 데 중점을 두지 만 유사한 프로세스를 사용하여 다른 채널 구성을 업데이트 할 수 있습니다 (예 : 수정 정책 업데이트 또는 배치 크기 변경). 
+ 여기에 설명 된 것과 같은 채널 구성 업데이트는 일반적으로 체인 코드 또는 응용 프로그램 개발자가 아닌 조직 관리자의 책임이라는 점에 주목할 가치가 있습니다.
+
+## Setup the Environment
+```
+cd fabric-samples/test-network
+./network.sh up createChannel
+```
+
+## Bring Org3 into the Channel with the Script
+```
+cd addOrg3
+./addOrg3.sh up
+```
+넌 Org3 암호화 재료가 생성되는거, Org3조직 정의가 생성되는거, 그리고 채널 구성이 업데이트되고, 서명되고 채널에 제출되는걸 볼 수 있다.
+
+```정상응답
+========= Finished adding Org3 to your test network! =========
+```
+채널에 Org3 추가 완료. 이제 뒷단에서 채널구성을 업데이트하는 단계로 갈수있다.
+
+## Bring Org3 into the Channel Manually
+addOrg3.sh스크립트를 사용했으면, 네트워크를 내려야한다. 다음명령으로 실행중인 컴포넌트들 내리고, 크립토마테리얼을 제거하자
+```
+./addOrg3.sh down
+
+cd ..
+./network.sh up createChannel
+```
+
+이제 Org3를 채널에 수동으로 추가한다. 첫 단계로 Org3의 암호화재료 생성이 필요하다.
+
+## Generate the Org3 Crypto Material
+```
+cd addOrg3
+```
+먼저 응용 프로그램 및 관리자와 함께 Org3 피어의 인증서와 키를 만듭니다.
+우리는 예제채널을 업데이트하기 때문에, CA대신 cryptogen 툴을 사용할거다.
+다음 명령은 org3-crypto.yaml파일을 읽기위해 cryptogen을 사용하고, org3.example.com폴더에 org3 암호화 재료를 생성한다.
+```
+../../bin/cryptogen generate --config=org3-crypto.yaml --output="../organizations"
+```
+test-network/organizations/peerOrganizations 디렉토리에서 Org1 및 Org2에 대한 인증서 및 키와 함께 생성 된 Org3 암호화 자료를 찾을 수 있습니다.
+Org3 암호 자료를 작성하면 configtxgen 도구를 사용하여 Org3 조직 정의를 출력 할 수 있습니다. 
+툴이 현재 디렉토리에서 포함해야하는 configtx.yaml 파일을 찾도록 지시하여 명령을 시작합니다.
+
+```
+export FABRIC_CFG_PATH=$PWD
+../../bin/configtxgen -printOrg Org3MSP > ../organizations/peerOrganizations/org3.example.com/org3.json
+```
+
+조직정의는 베이스64인코딩된 3개의 중요 인증서와 더불어 Org3의 정책 정의를 포함한다.
+
+- 조직의 trust 루트를 설정하는 데 사용되는 CA 루트 인증서
+- 블록 배포 및 서비스 검색을 위해 Org3을 식별하기 위해 가십 프로토콜에서 사용하는 TLS 루트 인증서
+- 어드민 유저 인증서(Org3의 어드민을 수행하기 위해 필요함)
+
+이 조직 정의를 채널 config에 추가하여 채널에 Org3를 추가할거다.
+
+## Bring up Org3 components
+Org3인증서 재료를 추가한 후에, Org3피어를 올릴수있다. addOrg3디렉터리에서 다음을 실행하라
+```
+docker-compose -f docker/docker-compose-org3.yaml up -d
+```
+```정상응답
+Creating peer0.org3.example.com ... done
+Creating Org3cli                ... done
+```
+
+이 도커컴포즈 파일은 우리 최초 네트워크를 연결하도록 설정돼있다. 그래서 Org3피어와 Org3CLI가 테스트네트워크에 현존하는 피어와 오더링노드를 연결한다.
+Org3CLI컨테이너를 네트워크와 통신하고, 채널에 Org3를 추가하는 peer커맨드를 날리기 위해 쓸거다.
+
+## Prepare the CLI Environment
+업데이트과정은 컨피그 번역 툴의 사용을 만든다 (-configtxlator).
+
+이 툴은 SDK에 stateless한 restapi를 제공한다. 추가로, 구성업무를 간단히 하는 CLI툴도 제공한다.
+툴은 
