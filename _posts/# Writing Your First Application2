@@ -1,0 +1,288 @@
+---
+marp: true
+---
+
+# 첫 어플리케이션 만들기
+
+## 들어가기 전에
+이 튜토리얼은 Fabric어플리케이션이 배포된 블록체인네트워크와 상호작용하는 방법을 다룬다.
+
+다음의 세가지 기본단계를 거친다.
+1. 개발환경 구성
+2. 샘플 스마트컨트렉트 탐색
+3. 샘플 어플리케이션으로 스마트컨트랙트와 상호작용
+
+ 
+ 
+---
+
+
+
+## 블록체인 네트워크 구성
+
+### 네트워크 실행
+
+>\> cd fabric-samples/fabcar
+>\> ./startFabric.sh javascript
+
+이 커맨드는 2개의 피어와 1개 오더링 서비스로 Fabric테스트 네트워크를 배포한다.
+
+암호툴 대신 CA(인증기관)으로 테스트 네트워크를 구성한다.
+
+이 CA중 하나를 사용하여 향후 어플리케이션에서 사용할 인증서와 키를 만든다.
+
+startFabric.sh 스크립트는 또한 mychannel 채널에 Fabcar스마트 컨트렉트를 배포하고 초기화한 후, 초기데이터를 넣는다.
+
+---
+
+## 블록체인 네트워크 구성
+
+### 어플리케이션 설치
+
+
+>\> cd javascript
+>\> npm install
+
+제일 중요한것은 fabric-network클래스이다.
+
+이는 어플리케이션이 identities, wallets 그리고 채널에 연결하고 트랜잭션을 전송하는 게이트웨이를 사용할 수 있게 한다.
+
+또한 fabric-ca-client클래스도 사용하여 사용자를 각각의 인증기관에 등록하여 유효한 ID를 생성 한 다음, fabric-network클래스 메소드에서 사용한다.
+
+---
+
+## 어드민 유저 등록
+>! 다음 두 섹션은 CA와 통신을 포함한다. docker logs -f ca_org1으로 CA로그 확인 가능.
+
+네트워크를 생성할때, 어드민유저가 CA의 등록자로 생성된다.
+
+첫번째 단계는 enroll.js로 admin의 개인키, 공개키, x.509인증서를 만드는거다.
+
+이 단계는 Certificate Signing Request(CSR)을 사용한다 - 개인키와 공개키가 처음 로컬에 생성되고, 공개키는 인코딩된 인증서(어플리케이션용)를 리턴하는 CA에 보내진다.
+
+이 인증서는 월렛에 저장되고, CA의 어드민으로 행동할 수 있게 한다.
+
+admin유저를 등록하자
+
+>\> node enrollAdmin.js
+
+이 커맨드는 CA 어드민의 인증서를 wallet디렉터리에 저장한다.(wallet/admin.id에서 인증서와 개인키 확인 가능)
+
+---
+
+## 어플리케이션 유저 등록
+우리 admin이 CA와 협력하는데 사용된다.
+
+wallet에 어드민의 인증서를 갖고있으므로, 새 어플리케이션 유저를 생성할 수 있다.
+
+새로운 유저 appUser를 생성하고 등록하기 위해 다음을 실행하라
+
+
+>\> node registerUser.js
+
+어드민 등록과 비슷하게, 이 프로그램은 appUser등록을 위해 CSR을 사용하고, 관리자의 인증서와 함께 월렛에 인증서를 저장한다.
+
+---
+
+## 원장 조회
+
+블록체인 네트워크의 각 피어는 원장의 사본을 지닌다. 어플리케이션은 쿼리라고 불리는 스마트 컨트렉트의 read-only 호출을 사용하여 원장의 최신 데이터를 볼 수 있다.
+
+가장 일반적인 쿼리에는 원장의 현재 데이터 값인 world state가 포함된다.
+
+world state는 키-밸류쌍으로 표시되며 응용프로그램은 단일키 또는 여러키에 대한 데이터를 쿼리할 수 있다.
+
+또한 couchDB를 상태DB로 사용하고 JSON에서 데이터를 모델링할 때 복잡한 쿼리를 사용하여 원장의 데이터를 읽을 수 있다.
+
+이는 특정 키워드가 특정 값에 일치하는 모든 자산을 찾을때 유용하다.
+
+---
+
+## 원장 조회
+
+query.js는 원장 접근에 appUser를 사용한다.
+
+>\> node query.js
+
+```
+출력결과
+
+Wallet path: ...fabric-samples/fabcar/javascript/wallet
+Transaction has been evaluated, result is:
+[{"Key":"CAR0","Record":{"color":"blue","docType":"car","make":"Toyota","model":"Prius","owner":"Tomoko"}},
+{"Key":"CAR1","Record":{"color":"red","docType":"car","make":"Ford","model":"Mustang","owner":"Brad"}},
+{"Key":"CAR2","Record":{"color":"green","docType":"car","make":"Hyundai","model":"Tucson","owner":"Jin Soo"}},
+{"Key":"CAR3","Record":{"color":"yellow","docType":"car","make":"Volkswagen","model":"Passat","owner":"Max"}},
+{"Key":"CAR4","Record":{"color":"black","docType":"car","make":"Tesla","model":"S","owner":"Adriana"}},
+{"Key":"CAR5","Record":{"color":"purple","docType":"car","make":"Peugeot","model":"205","owner":"Michel"}},
+{"Key":"CAR6","Record":{"color":"white","docType":"car","make":"Chery","model":"S22L","owner":"Aarav"}},
+{"Key":"CAR7","Record":{"color":"violet","docType":"car","make":"Fiat","model":"Punto","owner":"Pari"}},
+{"Key":"CAR8","Record":{"color":"indigo","docType":"car","make":"Tata","model":"Nano","owner":"Valeria"}},
+{"Key":"CAR9","Record":{"color":"brown","docType":"car","make":"Holden","model":"Barina","owner":"Shotaro"}}]
+```
+
+---
+
+## 원장 조회
+
+어플리케이션은 fabric-network모듈에서 Wallets와 Gateway 클래스를 가져온다. 
+
+이 클래스들은 wallet안의 appUser 인증서 위치 지정, 네트워크 연결에 쓰인다.
+
+```
+const { Gateway, Wallets } = require('fabric-network');
+...
+const identity = await wallet.get('appUser');
+...
+const gateway = new Gateway();
+await gateway.connect(ccpPath, { wallet, identity: 'appUser', discovery: { enabled: true, asLocalhost: true } });
+```
+
+ccpPath는 어플리케이션이 네트워크에 연결하는데 사용할 연결 프로필의 경로를 설명한다. 
+```
+// connection profile
+const ccpPath = path.resolve(__dirname, '..', '..', 'test-network','organizations','peerOrganizations','org1.example.com', 'connection-org1.json');
+```
+
+---
+
+## 원장 조회
+
+네트워크는 여러개의 채널로 나눠질수 있고, 다음 라인을 통해 mychannel에 연결할 수 있다.
+```
+const network = await gateway.getNetwork('mychannel');
+```
+이 채널 안에서, FabCar스마트컨트랙트로 원장에 접근할 수 있다.
+```
+const contract = network.getContract('fabcar');
+...
+const result = await contract.evaluateTransaction('queryAllCars'); 
+```
+evaluateTransaction 메소드는 스마트컨트랙트와 상호작용하는 가장 심플한 메소드이다.
+단순히 connection profile에 정의된 한 피어를 골라서 요청을 날린다.
+스마트컨트렉트는 피어의 원장사본에 모든 차를 조회하고, 결과를 어플리케이션에 리턴한다.
+
+---
+
+## FabCar 스마트컨트랙트
+
+FabCar스마트 컨트렉트 안의 트랜잭션을 살펴보자(fabric-samples/chaincode/fabcar/javascript/lib/fabcar.js
+)
+```
+class FabCar extends Contract {
+    ...
+async queryAllCars(ctx) {
+
+  const startKey = 'CAR0';
+  const endKey = 'CAR999';
+
+  const iterator = await ctx.stub.getStateByRange(startKey, endKey);
+```
+위 코드는 조회할 자동차의 범위를 지정한다.
+
+---
+
+## FabCar 스마트컨트랙트
+
+각 트랜잭션은 getStateByRange와 같은 다양한 API들을 사용하여 원장에 접근한다.
+
+우선, 어플리케이션의 query프로그램의 evaluateTransaction요청을 바꿔보자
+```
+const result = await contract.evaluateTransaction('queryCar', 'CAR4');
+```
+
+>\> node query.js
+
+응답
+```
+Wallet path: ...fabric-samples/fabcar/javascript/wallet
+Transaction has been evaluated, result is:
+{"color":"black","docType":"car","make":"Tesla","model":"S","owner":"Adriana"}
+```
+
+---
+
+## 원장 업데이트
+
+어플리케이션 관점에서, 원장 업데이트는 단순하다.
+트랜잭션을 전송하면, 그것이 검증 및 커밋됐을때, 어플리케이션은 트랜잭션이 성공했다는 알림을 받는다.
+
+여기에는 모든 제안된 업데이트가 합의되고 일관된 순서로 수행되도록 하는 합의 과정이 포함된다.
+
+원장사본을 가진 여러 피어들뿐만아니라, 오더링 서비스들까지 네트워크 및 프로세스에 포함된다.(선택적으로 스마트컨트랙트 사본)
+
+invoke.js 프로그램은 원장 업데이트에 쓰인다.
+```
+await contract.submitTransaction('createCar', 'CAR12', 'Honda', 'Accord', 'Black', 'Tom');
+```
+여기서는 순차 키를 사용할 필요가 없음을 나타 내기 위해 CAR12를 식별 키로 사용한다.
+
+---
+
+## 원장 업데이트
+
+
+>\> node invoke.js
+
+결과
+```
+Wallet path: ...fabric-samples/fabcar/javascript/wallet
+Transaction has been submitted
+```
+
+submitTransaction은 evaluateTransaction보다 복잡하다. 
+SDK는 단일 피어와 상호 작용하지 않고 블록 체인 네트워크에서 모든 필수 조직의 피어에게 submitTransaction 제안을 보낸다.(쿼리는 단일피어와 상호작용)
+
+각 피어는 이 제안을 사용하여 요청된 스마트컨트렉트를 실행하고, 서명한 트랜잭션 응답을 생성하여 SDK에 리턴한다.
+
+SDK는 서명된 트랜잭션 응답을 단일 트랜잭션으로 수집한 다음 오더러에게 보낸다.
+
+---
+
+## 원장 업데이트
+
+오더러는 모든 어플리케이션에서 받은  트랜잭션을 모으고 순서를 지정하여 트랜잭션 블록에 넣는다.
+그리고 그 블록을 네트워크의 모든 피어에 배포하여 모든 트랜잭션을 확인하고 커밋한다.
+마지막으로 SDK에 알림이 전달되어 응용 프로그램으로 제어권을 되돌릴 수 있다.
+
+>! submitTransaction에는 트랜잭션이 검증되고 원장에 커밋되었는지 확인하는 리스너가 포함되어 있다. 어플리케이션은 커밋 리스너를 사용하거나 리스너를 수행하는 API를 사용해야한다.
+
+애플리케이션, 스마트 계약, 피어 및 주문 서비스가 함께 작동하여 네트워크에서 원장을 일관되게 유지하는 프로세스를 합의라고 한다.
+
+---
+
+## 원장 업데이트
+
+원장 변경이 잘 됐는지 확인해보기 위해 query.js를 변경
+```
+const result = await contract.evaluateTransaction('queryCar', 'CAR12');
+```
+
+>\> node query.js
+
+응답
+```
+Wallet path: ...fabric-samples/fabcar/javascript/wallet
+Transaction has been evaluated, result is:
+{"color":"Black","docType":"car","make":"Honda","model":"Accord","owner":"Tom"}
+```
+
+---
+
+## 원장 업데이트
+다음으로, Tom이 Dave에게 차를 주는 경우를 살펴보자.
+이를 위해 createCar를 changeCarOwner로 변경하여 적절한 인풋값을 넣어주자
+
+```
+await contract.submitTransaction('changeCarOwner', 'CAR12', 'Dave');
+```
+>\> node invoke.js
+>\> node query.js
+
+응답
+```
+Wallet path: ...fabric-samples/fabcar/javascript/wallet
+Transaction has been evaluated, result is:
+{"color":"Black","docType":"car","make":"Honda","model":"Accord","owner":"Dave"}
+```
+
