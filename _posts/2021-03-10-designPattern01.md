@@ -171,8 +171,7 @@ public class NUserDao extends UserDao {
 
 같은 코드라도 보는 관점에 따라 템플릿 메소드 패턴으로 볼 수 도 있고 팩토리 메소드 패턴으로 볼 수도 있는 것이다. 아마 실제 프로덕션 코드에도 이처럼 패턴들이 혼재돼있는 경우가 많을듯 싶다.
 
-![https://s3-us-west-2.amazonaws.com/secure.notion-static.com/1eb2b89c-369c-46c1-bd72-b6652c0264ff/Screen_Shot_2021-03-10_at_00.26.10_AM.png](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/1eb2b89c-369c-46c1-bd72-b6652c0264ff/Screen_Shot_2021-03-10_at_00.26.10_AM.png)
-![design_pattern_example](../assets/image/templateMethod&factoryMethod)
+![design_pattern_example](../assets/image/templateMethod&factoryMethod.png)
 
 ## 사견
 
