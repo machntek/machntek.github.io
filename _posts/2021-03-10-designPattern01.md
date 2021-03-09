@@ -171,7 +171,7 @@ public class NUserDao extends UserDao {
 
 같은 코드라도 보는 관점에 따라 템플릿 메소드 패턴으로 볼 수 도 있고 팩토리 메소드 패턴으로 볼 수도 있는 것이다. 아마 실제 프로덕션 코드에도 이처럼 패턴들이 혼재돼있는 경우가 많을듯 싶다.
 
-![design_pattern_example](./../assets/image/templateMethod%26factoryMethod.png)
+![design_pattern_example](../assets/images/templateMethod%26factoryMethod.png)
 
 ## 사견
 
